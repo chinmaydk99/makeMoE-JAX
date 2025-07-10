@@ -1,51 +1,121 @@
-# makeMoE
+# Sparse Mixture of Experts Language Model - JAX Implementation
 
-<div align="center">
-    <img src="images/makemoelogo.png" width="500"/>
-</div>
+A from-scratch implementation of a Sparse Mixture of Experts (MoE) language model in JAX/Flax, ported from the original PyTorch implementation inspired by Andrej Karpathy's makemore project.
 
+## Features
 
+- **Sparse MoE Architecture**: Implements sparse mixture of experts with top-k routing
+- **JIT Compilation**: Optimized for performance with JAX's JIT compilation
+- **Modular Design**: Clean, reusable components for easy experimentation
+- **Comprehensive Testing**: Full test suite ensuring correctness
+- **Detailed Documentation**: Complete porting guide and API documentation
 
+## Architecture Components
 
-#### Sparse mixture of experts language model from scratch inspired by (and largely based on) Andrej Karpathy's makemore (https://github.com/karpathy/makemore) :)
+### Core Components
+- **Expert Module**: Simple MLP experts with 4x expansion
+- **Router**: Top-k and noisy top-k routing for load balancing
+- **Sparse MoE Layer**: JIT-compatible sparse expert routing
+- **Multi-Head Attention**: Causal self-attention mechanism
+- **Transformer Block**: Combines attention and MoE layers
+- **Language Model**: Complete autoregressive language model
 
-HuggingFace Community Blog that walks through this: https://huggingface.co/blog/AviSoori1x/makemoe-from-scratch
+### Key Improvements Over PyTorch Version
+- **JIT Compatibility**: Avoided dynamic shapes for better performance
+- **Functional Programming**: Leverages JAX's functional paradigm
+- **Better Modularity**: Separated concerns into focused modules
+- **Type Safety**: Comprehensive type annotations
+- **Memory Efficiency**: Optimized memory usage patterns
 
-Part #2 detailing expert capacity: https://huggingface.co/blog/AviSoori1x/makemoe2
+## Quick Start
 
-This is an implementation of a sparse mixture of experts language model from scratch. This is inspired by and largely based on Andrej Karpathy's project 'makemore' and borrows the re-usable components from that implementation. Just like makemore, makeMoE is also an autoregressive character-level language model but uses the aforementioned sparse mixture of experts architecture. 
+### Installation
+```bash
+pip install jax flax optax
+```
 
-Just like makemore, pytorch is the only requirement (so I hope the from scratch claim is justified).
+### Basic Usage
+```python
+import jax
+import jax.random as random
+from src import SparseMoELanguageModel, create_train_state, train_model
 
-Significant Changes from the makemore architecture
+# Model configuration
+model_config = {
+    'vocab_size': 10000,
+    'n_embd': 256,
+    'n_head': 8,
+    'num_experts': 8,
+    'top_k': 2,
+    'n_layer': 4,
+    'block_size': 128,
+    'dropout_rate': 0.1
+}
 
-- Sparse mixture of experts instead of the solitary feed forward neural net. 
-- Top-k gating and noisy top-k gating implementations.
-- initialization - Kaiming He initialization used here but the point of this notebook is to be hackable so you can swap in Xavier Glorot etc. and take it for a spin.
-- Expert Capacity -- most recent update (03/18/2024)
+# Create training state
+key = random.PRNGKey(42)
+state = create_train_state(key, model_config, learning_rate=1e-3)
 
-Unchanged from makemore
-- The dataset, preprocessing (tokenization), and the language modeling task Andrej chose originally - generate Shakespeare-like text
-- Causal self attention implementation 
-- Training loop
-- Inference logic
+# Train the model (with your data)
+final_state = train_model(state, train_data, num_epochs=10, batch_size=32, rng_key=key)
+```
 
-Publications heavily referenced for this implementation: 
-- Outrageously Large Neural Networks: The Sparsely-Gated Mixture-Of-Experts layer: https://arxiv.org/pdf/1701.06538.pdf
-- Mixtral of experts: https://arxiv.org/pdf/2401.04088.pdf
+### Text Generation
+```python
+# Generate text
+model = SparseMoELanguageModel(**model_config)
+start_tokens = jnp.array([[1, 2, 3, 4]])  # Your starting tokens
 
-makeMoE.py is the entirety of the implementation in a single file of pytorch.
+generated = model.apply(
+    final_state.params,
+    start_tokens,
+    max_new_tokens=50,
+    temperature=0.8,
+    rng_key=key,
+    method=model.generate
+)
+```
 
-makMoE_from_Scratch.ipynb walks through the intuition for the entire model architecture and how everything comes together. I recommend starting here.
+## Testing
 
-makeMoE_from_Scratch_with_Expert_Capacity.ipynb just builds on the above walkthrough and adds expert capacity for more efficient training.
+Run the comprehensive test suite:
+```bash
+cd makeMoE-JAX
+python -m src.test_model
+```
 
-makeMoE_Concise.ipynb is the consolidated hackable implementation that I encourage you to hack, understand, improve and make your own
+Run the Shakespeare example:
+```bash
+python -m src.example
+```
 
-**The code was entirely developed on Databricks using a single A100 for compute. If you're running this on Databricks, you can scale this on an arbitrarily large GPU cluster with no issues, on the cloud provider of your choice.**
+## Project Structure
 
-**I chose to use MLFlow (which comes pre-installed in Databricks. It's fully open source and you can pip install easily elsewhere) as I find it helpful to track and log all the metrics necessary. This is entirely optional but encouraged.**
+```
+makeMoE-JAX/
+├── src/
+│   ├── __init__.py           # Package initialization
+│   ├── expert.py             # Expert MLP module
+│   ├── router.py             # Top-k and noisy routing
+│   ├── sparse_moe.py         # Sparse MoE layer
+│   ├── attention.py          # Multi-head attention
+│   ├── transformer_block.py  # Transformer block
+│   ├── language_model.py     # Main language model
+│   ├── training.py           # Training utilities
+│   ├── test_model.py         # Test suite
+│   └── example.py            # Shakespeare example
+├── PORTING_GUIDE.md          # Detailed porting documentation
+└── README.md                 # This file
+```
 
-**Please note that the implementation emphasizes readability and hackability vs. performance, so there are many ways in which you could improve this. Please try and let me know!**
+## Key Differences from PyTorch
 
-Hope you find this useful. Happy hacking!!
+### 1. JIT Compilation Compatibility
+The biggest challenge was making the sparse routing JIT-compatible. The original PyTorch version used dynamic shapes:
+
+```python
+# PyTorch (dynamic shapes)
+expert_mask = (indices == i).any(dim=-1)
+if expert_mask.any():
+    expert_input = x[expert_mask]
+```
